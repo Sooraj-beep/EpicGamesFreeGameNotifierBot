@@ -1,4 +1,7 @@
 import discord
+import asyncio
+from discord.ext import tasks
+from datetime import datetime
 from epicstore_api import EpicGamesStoreAPI
 client = discord.Client(intents=discord.Intents.all())
 epic_api = EpicGamesStoreAPI()
@@ -15,29 +18,45 @@ def free_games(api):
         free_games_dict[game['title']] = [game['description'], game['promotions'], game_url]
     return free_games_dict
 
+def createFreeGamesMessage():
+    free_games_dict = free_games(epic_api)
+    currentGames = "\n*Currently Free*\n"
+    upcomingGames = "\n*Free next week*\n"
+
+    for key in free_games_dict.keys():
+        promotions = free_games_dict[key][1]
+        if promotions:
+            if promotions['promotionalOffers']:
+                currentGames += "**"+key+"**\n"
+                currentGames += free_games_dict[key][0]+"\n"
+                if free_games_dict[key][2]:
+                    currentGames += "**Link**: https://" + free_games_dict[key][2] + "\n\n"
+            elif promotions['upcomingPromotionalOffers']:
+                upcomingGames += "**"+key+"**\n"
+                upcomingGames += free_games_dict[key][0]+"\n\n"
+    
+    return currentGames+upcomingGames
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
     if message.content == '!get free games':
-        free_games_dict = free_games(epic_api)
-        
-        currentGames = "\n*Currently Free*\n"
-        upcomingGames = "\n*Free next week*\n"
+        msg = createFreeGamesMessage()
+        await message.channel.send(msg)
 
-        for key in free_games_dict.keys():
-            promotions = free_games_dict[key][1]
-            if promotions:
-                if promotions['promotionalOffers']:
-                    currentGames += "**"+key+"**\n"
-                    currentGames += free_games_dict[key][0]+"\n"
-                    if free_games_dict[key][2]:
-                        currentGames += "**Link**: https://" + free_games_dict[key][2] + "\n\n"
-                elif promotions['upcomingPromotionalOffers']:
-                    upcomingGames += "**"+key+"**\n"
-                    upcomingGames += free_games_dict[key][0]+"\n\n"
+@tasks.loop(hours=168)
+async def weekly_announcement():
+    await client.wait_until_ready()
+    channel_ids = [] # add your channel ids here
+    for id in channel_ids:
+        channel = client.get_channel(id)
+        msg = createFreeGamesMessage()
+        await channel.send(msg)
 
-        await message.channel.send(currentGames+upcomingGames)
+@client.event
+async def on_ready():
+   if not weekly_announcement.is_running():
+      weekly_announcement.start()
 
-client.run('AUTH') # Use your bot auth id here
+client.run('') # Use your bot auth id here
 
